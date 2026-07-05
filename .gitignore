@@ -1,276 +1,946 @@
--- // THAI HUB [PREMIUM MODERN EDITION] \\ --
--- ปรับปรุงดีไซน์ตามตัวอย่าง: โทน Dark, แอนิเมชั่นตอนเปิด, และความสวยงาม
+import os
+import json
+import io
+import typing
+import urllib.parse
+import asyncio
+import discord
+from discord.ext import commands
+import aiohttp
+from discord import app_commands
+import datetime
 
-task.wait(0.5)
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
 
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+bot = commands.Bot(command_prefix="-", intents=intents)
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+GROUP_ID = 293746236
 
-local AutoGarbageRunning = false
+DISCORD_BOT_TOKEN = "MTUxNjA0MDI3NjAwMTQyNzUyNg.Gx766t.JyO-cBNgCZDTnuh2z8bK75USOW6R6t0F4n_Cx0"
+ROBLOX_COOKIE = "_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|_CAEaBBAEGAEiGwoEZHVpZBITMzQ4NjYyNzA0NDMxMDA2Mjc0OCgD.W-7gLdxZhQViQb15DKBNU0kh8EVYQZFZLQgwcZfQde7PkKlyknAJgyF_V5i_-kF52uDuvQD9nGSJ6HvrGCyXRq2Vxxk37FDpuc58we9mLEjL7KUHjO77_720-ai5RTQss7U17gFwQeUyLP2N8y4FowXYDvuUz9xmcOjGsitNluc6oey43dElZb-wFNM_ApyTRLkw7npbGjDp-RzmbOTPL5KlTvhiBHZbgn7wZ4XRCGGiOxAbdKLtGOeS9QtKXbEmgwsfKN1j9uJrtqPkNH5IYBsn0byPXmHFtXlbG4hygVo9jvwy63qTfmQfyFu_5fLjUdnXZx8hKGvXp0IMiHu2W9OeSb9-SoLCiTckXUcJDZ38zTnB5Zw4nyNJ7jHnXnV52k4r69qOjhFiuNjXB5npa6oYxLap5awdJ3ChiqHIaoU8UWTeq15RyCijcNwNwiMUWNmr9sCc3tEUL7J6NQzX1Kr7vNXtvmaEehYJT0dgUzzaOym1Rzxx6wD25lB18ubFDGBmRbbqxKJLbPduhGEpoxWm7mj9TJg9AAN7rMnh5oEI9D3HRieiiYc2B4u-7AaV5KUUFNkPQ2kgxzrkIBpsNxkaUhqLk7zvzFgkhyiPiSJDRiTxmQg1UZy9LR2MsL4Kwm4s0fBfwfFnDdGNlEvtcnQTBHV1QyJcxKTu5zZMwqdSC-Fh5qAhgAkPmMLxSV9YkGUO2mz1glhOrU41jeWIJPPvAS5uoJeFtyV3a3oEQdTtLOonP_9DQOhjdH6vdCwY_OBRC1hc_3RKXrQW2s0C6DnVrbaQnVnkDOdHF26zMSF-4DtEcR8IcO_1IIe9MsAxZAC48uRAuLeQGenxiP2aApBq28cZ7WW25DidftF8fHDvAcjcIMDvWgFwTrMatynSwWJMs9HDm7_NZT8rASLSrTy97o995n__aLWmcz68hBg.rXX4ERs3OdjnTlacHCGCU-5lh0A"
 
--- // HELPER FUNCTIONS \\ --
-local function AddCorner(obj, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 8)
-    c.Parent = obj
-end
+# --- Persistent storage ---
+DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_data.json")
 
-local function CreateTween(obj, duration, info)
-    local tween = TweenService:Create(obj, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), info)
-    tween:Play()
-    return tween
-end
+verified_users = {}
+user_data = {}
+user_balance = {}
+promo_state = {"active": False, "percent": 0}
 
--- // DRAG SYSTEM \\ --
-local function makeDraggable(frame, handle)
-    local dragging, dragInput, dragStart, startPos
-    handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-        end
-    end)
-    handle.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-    handle.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-end
+RANK_PRICES = {
+    12: 50, 13: 70, 14: 100, 15: 150,
+    16: 170, 17: 200, 18: 250, 19: 270,
+    20: 300, 21: 250, 22: 270, 23: 300,
+    26: 450, 27: 500
+}
 
--- // LOGIC: AUTO GARBAGE (เหมือนเดิม) \\ --
-local function TriggerPrompt(prompt)
-    prompt.HoldDuration = 0
-    if fireproximityprompt then fireproximityprompt(prompt) return end
-    prompt:InputHoldBegin()
-    prompt:InputHoldEnd()
-end
+LOG_RANK_CHANNEL_ID = None
+LOG_RANK_ENABLED = True
 
-local function StartAutoGarbage(updateUIFunc, debugFunc)
-    if AutoGarbageRunning then return end
-    AutoGarbageRunning = true
-    debugFunc("🚀 กำลังรันระบบทำเงิน...")
-    updateUIFunc(true, "STOP AUTO FARM")
-    
-    task.spawn(function()
-        while AutoGarbageRunning do
-            local allGarbage = {}
-            for _, obj in pairs(workspace:GetDescendants()) do
-                if obj.Name == "Garbage" and obj:IsA("BasePart") and obj.Transparency < 1 then
-                    table.insert(allGarbage, obj)
-                end
-            end
-            if #allGarbage == 0 then
-                debugFunc("❌ รอขยะเกิดใหม่...")
-                task.wait(2)
-            else
-                for _, part in pairs(allGarbage) do
-                    if not AutoGarbageRunning then break end
-                    local prompt = part:FindFirstChild("ProximityPrompt", true)
-                    if prompt then
-                        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0) end
-                        task.wait(0.1)
-                        TriggerPrompt(prompt)
-                        task.wait(0.1)
-                    end
-                end
-            end
-            task.wait(0.5)
-        end
-    end)
-end
+RANK_LIST_MESSAGE = {"channel_id": None, "message_id": None}
+ADMIN_LIST_MESSAGE = {"channel_id": None, "message_id": None}
 
--- // UI CREATION \\ --
-local function createUI()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "ModernThaiHub"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = playerGui
 
-    -- Main Frame (ตั้งค่าโปร่งใสเพื่อรอการ Fade In)
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 380, 0, 250)
-    mainFrame.Position = UDim2.new(0.5, -190, 0.5, -125)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
-    mainFrame.BorderSizePixel = 0
-    mainFrame.BackgroundTransparency = 1 -- เริ่มต้นที่โปร่งใส
-    mainFrame.ClipsDescendants = true
-    mainFrame.Parent = screenGui
-    AddCorner(mainFrame, 10)
+def load_data():
+    global verified_users, user_data, user_balance, promo_state, RANK_PRICES, LOG_RANK_CHANNEL_ID, LOG_RANK_ENABLED
+    global RANK_LIST_MESSAGE, ADMIN_LIST_MESSAGE
+    if not os.path.exists(DATA_FILE):
+        print("[load_data] No existing data file found, starting fresh.")
+        promo_state = {"active": False, "percent": 0}
+        LOG_RANK_CHANNEL_ID = None
+        LOG_RANK_ENABLED = True
+        return
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
 
-    -- Shadow / Glow Effect (แบบง่าย)
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(45, 45, 50)
-    stroke.Thickness = 1.5
-    stroke.Parent = mainFrame
+        verified_users = raw.get("verified_users", {})
+        user_data = {int(k): v for k, v in raw.get("user_data", {}).items()}
+        user_balance = raw.get("user_balance", {})
 
-    -- Header (Top Bar)
-    local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 45)
-    header.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
-    header.BorderSizePixel = 0
-    header.Parent = mainFrame
-    AddCorner(header, 10)
-    makeDraggable(mainFrame, header)
+        promo_state = raw.get("promo_state", {"active": False, "percent": 0})
+        LOG_RANK_CHANNEL_ID = raw.get("log_rank_channel_id")
+        LOG_RANK_ENABLED = raw.get("log_rank_enabled", True)
 
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -50, 1, 0)
-    title.Position = UDim2.new(0, 15, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "🔥 Example Script Hub | Game 🔫"
-    title.TextColor3 = Color3.fromRGB(230, 230, 230)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 15
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = header
+        if "rank_prices" in raw:
+            RANK_PRICES = {int(k): v for k, v in raw["rank_prices"].items()}
 
-    -- Tab System UI (จำลองจากภาพ)
-    local tabContainer = Instance.new("Frame")
-    tabContainer.Size = UDim2.new(1, -30, 0, 35)
-    tabContainer.Position = UDim2.new(0, 15, 0, 55)
-    tabContainer.BackgroundTransparency = 1
-    tabContainer.Parent = mainFrame
+        RANK_LIST_MESSAGE = raw.get("rank_list_message", {"channel_id": None, "message_id": None})
+        ADMIN_LIST_MESSAGE = raw.get("admin_list_message", {"channel_id": None, "message_id": None})
 
-    local homeTab = Instance.new("TextButton")
-    homeTab.Size = UDim2.new(0, 80, 1, 0)
-    homeTab.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
-    homeTab.Text = "🏠 Home"
-    homeTab.TextColor3 = Color3.fromRGB(40, 40, 40)
-    homeTab.Font = Enum.Font.GothamBold
-    homeTab.TextSize = 13
-    homeTab.Parent = tabContainer
-    AddCorner(homeTab, 15)
+        print(f"[load_data] Loaded {len(user_data)} verified user(s) + settings from {DATA_FILE}")
+    except Exception as e:
+        print(f"[load_data] Failed to load {DATA_FILE}: {e}")
+        promo_state = {"active": False, "percent": 0}
+        LOG_RANK_CHANNEL_ID = None
+        LOG_RANK_ENABLED = True
 
-    -- Action Area (Section Main)
-    local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -30, 0, 130)
-    content.Position = UDim2.new(0, 15, 0, 100)
-    content.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    content.Parent = mainFrame
-    AddCorner(content, 8)
 
-    local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, 0, 0, 40)
-    statusLabel.Position = UDim2.new(0, 0, 0, 10)
-    statusLabel.BackgroundTransparency = 1
-    statusLabel.Text = "Status: Idle"
-    statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-    statusLabel.Font = Enum.Font.Gotham
-    statusLabel.TextSize = 14
-    statusLabel.Parent = content
+def save_data():
+    try:
+        raw = {
+            "verified_users": verified_users,
+            "user_data": {str(k): v for k, v in user_data.items()},
+            "user_balance": user_balance,
+            "promo_state": promo_state,
+            "rank_prices": {str(k): v for k, v in RANK_PRICES.items()},
+            "log_rank_channel_id": LOG_RANK_CHANNEL_ID,
+            "log_rank_enabled": LOG_RANK_ENABLED,
+            "rank_list_message": RANK_LIST_MESSAGE,
+            "admin_list_message": ADMIN_LIST_MESSAGE,
+        }
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(raw, f, ensure_ascii=False, indent=2)
+        print("[save_data] Saved settings successfully")
+    except Exception as e:
+        print(f"[save_data] Failed to save {DATA_FILE}: {e}")
 
-    local actionBtn = Instance.new("TextButton")
-    actionBtn.Size = UDim2.new(0.9, 0, 0, 45)
-    actionBtn.Position = UDim2.new(0.05, 0, 0.5, 0)
-    actionBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-    actionBtn.Text = "START AUTO FARM"
-    actionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    actionBtn.Font = Enum.Font.GothamBold
-    actionBtn.TextSize = 14
-    actionBtn.AutoButtonColor = false
-    actionBtn.Parent = content
-    AddCorner(actionBtn, 6)
 
-    -- Toggle Button (ปุ่มเปิด/ปิดขนาดเล็ก)
-    local openBtn = Instance.new("TextButton")
-    openBtn.Size = UDim2.new(0, 45, 0, 45)
-    openBtn.Position = UDim2.new(0, 10, 0.1, 0)
-    openBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    openBtn.Text = "🔥"
-    openBtn.TextSize = 20
-    openBtn.Visible = false
-    openBtn.Parent = screenGui
-    AddCorner(openBtn, 22)
-    local openStroke = Instance.new("UIStroke")
-    openStroke.Color = Color3.fromRGB(255, 100, 0)
-    openStroke.Parent = openBtn
+def apply_promo(base_price: int) -> int:
+    if promo_state.get("active") and promo_state.get("percent", 0) > 0:
+        discounted = base_price - (base_price * promo_state["percent"] // 100)
+        return max(discounted, 0)
+    return base_price
 
-    -- // ANIMATIONS & INTERACTION \\ --
-    
-    -- ตอนเปิดรันสคริปต์ (Opening Intro)
-    mainFrame.Size = UDim2.new(0, 300, 0, 200) -- เริ่มจากขนาดเล็ก
-    local introTween = TweenService:Create(mainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 380, 0, 250),
-        BackgroundTransparency = 0.05
-    })
-    introTween:Play()
 
-    -- Hover Effect for Button
-    actionBtn.MouseEnter:Connect(function()
-        CreateTween(actionBtn, 0.3, {BackgroundColor3 = Color3.fromRGB(60, 60, 65)})
-    end)
-    actionBtn.MouseLeave:Connect(function()
-        if not AutoGarbageRunning then
-            CreateTween(actionBtn, 0.3, {BackgroundColor3 = Color3.fromRGB(45, 45, 50)})
-        else
-            CreateTween(actionBtn, 0.3, {BackgroundColor3 = Color3.fromRGB(200, 60, 60)})
-        end
-    end)
+def build_bot_settings_embed():
+    if promo_state.get("active"):
+        promo_line = f"> **ลดราคา:** `{promo_state.get('percent', 0)}%` จากทุกยศ"
+        promo_status = "> **สถานะ:** <a:1519680484790112416:1520308598490665071> **เปิดใช้งานโปรโมชั่น**"
+    else:
+        promo_line = "> ราคายศทั้งหมดเป็นราคาปกติ"
+        promo_status = "> **สถานะ:** <a:1519680543128551690:1521862768435920999> **ปิดโปรโมชั่น**"
 
-    -- Button Logic
-    actionBtn.MouseButton1Click:Connect(function()
-        if AutoGarbageRunning then
-            AutoGarbageRunning = false
-            actionBtn.Text = "START AUTO FARM"
-            CreateTween(actionBtn, 0.3, {BackgroundColor3 = Color3.fromRGB(45, 45, 50)})
-            statusLabel.Text = "Status: Stopped"
-        else
-            StartAutoGarbage(function(running, txt)
-                actionBtn.Text = txt
-                if running then
-                    CreateTween(actionBtn, 0.3, {BackgroundColor3 = Color3.fromRGB(200, 60, 60)})
-                end
-            end, function(msg)
-                statusLabel.Text = "Status: " .. msg
-            end)
-        end
-    end)
+    divider = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    -- Close/Open System
-    local function toggleUI(show)
-        if show then
-            openBtn.Visible = false
-            mainFrame.Visible = true
-            CreateTween(mainFrame, 0.4, {Size = UDim2.new(0, 380, 0, 250), BackgroundTransparency = 0.05})
-        else
-            local t = CreateTween(mainFrame, 0.3, {Size = UDim2.new(0, 300, 0, 200), BackgroundTransparency = 1})
-            t.Completed:Connect(function()
-                mainFrame.Visible = false
-                openBtn.Visible = true
-            end)
-        end
-    end
+    embed = discord.Embed(
+        title="<a:1389806861816959096:1522125011039682692> ระบบตั้งค่าระบบบอทโดเนท",
+        description=(
+            f"{promo_status}\n"
+            f"{promo_line}\n"
+            f"{divider}\n"
+            f"> **สถานะบอท:** <a:1236208029246947339:1521848797326479462> **พร้อมใช้งาน**\n"
+            f"> **ยศที่เปิดขาย:** `{len(RANK_PRICES)}` รายการ"
+        ),
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text=f"อัพเดทล่าสุด: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    return embed
 
-    -- ป้ายปิด (ใช้ Header ดับเบิลคลิก หรือเพิ่มปุ่ม X)
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0, 30, 0, 30)
-    closeBtn.Position = UDim2.new(1, -35, 0, 7)
-    closeBtn.BackgroundTransparency = 1
-    closeBtn.Text = "×"
-    closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-    closeBtn.TextSize = 25
-    closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.Parent = header
-    closeBtn.MouseButton1Click:Connect(function() toggleUI(false) end)
-    
-    openBtn.MouseButton1Click:Connect(function() toggleUI(true) end)
-end
 
-createUI()
+LOG_CHANNEL_ID = 1522151871748374599
+
+
+async def get_group_roles():
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(f"https://groups.roblox.com/v1/groups/{GROUP_ID}/roles") as resp:
+                if resp.status != 200:
+                    print(f"[get_group_roles] HTTP {resp.status}: {await resp.text()}")
+                    return {}
+                data = await resp.json()
+                roles = {
+                    role["id"]: {"name": role["name"], "rank": role["rank"]}
+                    for role in data.get("roles", [])
+                    if role["rank"] > 0
+                }
+                return roles
+        except Exception as e:
+            print(f"[get_group_roles] Exception: {e}")
+            return {}
+
+
+async def get_roblox_rank(username: str):
+    async with aiohttp.ClientSession() as session:
+        try:
+            payload = {"usernames": [username]}
+            async with session.post("https://users.roblox.com/v1/usernames/users", json=payload) as resp:
+                data = await resp.json()
+                if not data.get("data"):
+                    return "ไม่พบผู้ใช้", False
+                user_id = data["data"][0]["id"]
+            async with session.get(f"https://groups.roblox.com/v2/users/{user_id}/groups/roles") as resp:
+                data = await resp.json()
+                for group in data.get("data", []):
+                    if group["group"]["id"] == GROUP_ID:
+                        return group["role"]["name"], True
+                return "สมาชิกทั่วไป", True
+        except Exception as e:
+            print(f"[get_roblox_rank] Exception: {e}")
+            return "เกิดข้อผิดพลาด", False
+
+
+async def change_roblox_rank(roblox_name: str, role_id: int):
+    try:
+        async with aiohttp.ClientSession() as session:
+            payload = {"usernames": [roblox_name]}
+            async with session.post("https://users.roblox.com/v1/usernames/users", json=payload) as resp:
+                data = await resp.json()
+                if not data.get("data"):
+                    return False
+                user_id = data["data"][0]["id"]
+
+            old_rank = "ไม่ทราบ"
+            async with session.get(f"https://groups.roblox.com/v2/users/{user_id}/groups/roles") as resp:
+                data = await resp.json()
+                for group in data.get("data", []):
+                    if group["group"]["id"] == GROUP_ID:
+                        old_rank = group["role"]["name"]
+                        break
+
+            headers = {
+                "Cookie": f".ROBLOSECURITY={ROBLOX_COOKIE}",
+                "Content-Type": "application/json",
+                "Referer": "https://www.roblox.com/"
+            }
+            async with session.post("https://auth.roblox.com/v2/logout", headers=headers) as resp:
+                csrf = resp.headers.get("x-csrf-token")
+                if csrf:
+                    headers["X-CSRF-TOKEN"] = csrf
+
+            async with session.patch(
+                f"https://groups.roblox.com/v1/groups/{GROUP_ID}/users/{user_id}",
+                json={"roleId": role_id},
+                headers=headers
+            ) as resp:
+                ok = resp.status in (200, 204)
+                if ok:
+                    await asyncio.sleep(2)
+                    new_rank = "ไม่ทราบ"
+                    for attempt in range(3):
+                        async with session.get(f"https://groups.roblox.com/v2/users/{user_id}/groups/roles") as resp2:
+                            data2 = await resp2.json()
+                            for group in data2.get("data", []):
+                                if group["group"]["id"] == GROUP_ID:
+                                    new_rank = group["role"]["name"]
+                                    break
+                        if new_rank != old_rank and new_rank != "ไม่ทราบ":
+                            break
+                        await asyncio.sleep(1.5)
+
+                    await log_rank_change(roblox_name, old_rank, new_rank, "บอท (ระบบโดเนท)")
+                return ok
+    except Exception as e:
+        print(f"[change_roblox_rank] Exception: {e}")
+        return False
+
+
+async def log_rank_change(username: str, old_rank: str, new_rank: str, changer: str = "ไม่ทราบ"):
+    if not LOG_RANK_ENABLED or not LOG_RANK_CHANNEL_ID:
+        return
+    channel = bot.get_channel(LOG_RANK_CHANNEL_ID)
+    if not channel:
+        return
+
+    embed = discord.Embed(
+        title="<a:1515615849845756015:1520378175731929098> แจ้งเตือนการปรับยศ",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="ชื่อผู้ปรับยศ", value=changer, inline=False)
+    embed.add_field(name="ผู้ถูกปรับยศ", value=username, inline=False)
+    embed.add_field(name="ยศเดิม", value=old_rank, inline=False)
+    embed.add_field(name="ยศปัจจุบัน", value=new_rank, inline=False)
+    embed.add_field(name="กลุ่ม", value="Thai Armed Forces Operation", inline=False)
+
+    await channel.send(embed=embed)
+
+
+@bot.tree.command(name="ตั้งห้องแจ้งเตือนปรับยศ", description="ตั้งช่องสำหรับแจ้งเตือนการปรับยศ (เฉพาะแอดมิน)")
+@app_commands.default_permissions(administrator=True)
+async def set_rank_log_channel(interaction: discord.Interaction, channel: discord.TextChannel):
+    global LOG_RANK_CHANNEL_ID
+    LOG_RANK_CHANNEL_ID = channel.id
+    save_data()
+    await interaction.response.send_message(f"<a:1236208029246947339:1521848797326479462> ตั้งช่องแจ้งเตือนการปรับยศเป็น {channel.mention} เรียบร้อยแล้ว", ephemeral=True)
+
+
+class LogToggleView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+
+    @discord.ui.button(label="เปิด Log ปรับยศ", style=discord.ButtonStyle.success, emoji="🟢")
+    async def turn_on(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> แอดมินเท่านั้น", ephemeral=True)
+            return
+        global LOG_RANK_ENABLED
+        LOG_RANK_ENABLED = True
+        save_data()
+        await interaction.response.edit_message(content="<a:1236208029246947339:1521848797326479462> **ระบบแจ้งเตือนการปรับยศถูกเปิดแล้ว**", view=None)
+
+    @discord.ui.button(label="ปิด Log ปรับยศ", style=discord.ButtonStyle.danger, emoji="🔴")
+    async def turn_off(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> แอดมินเท่านั้น", ephemeral=True)
+            return
+        global LOG_RANK_ENABLED
+        LOG_RANK_ENABLED = False
+        save_data()
+        await interaction.response.edit_message(content="<a:1512789817811927070:1521852613690261737> **ระบบแจ้งเตือนการปรับยศถูกปิดแล้ว**", view=None)
+
+
+@bot.tree.command(name="logปรับยศ", description="เปิด/ปิดการแจ้งเตือนการปรับยศ (เฉพาะแอดมิน)")
+@app_commands.default_permissions(administrator=True)
+async def toggle_rank_log(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> แอดมินเท่านั้น", ephemeral=True)
+        return
+    await interaction.response.send_message("**เลือกสถานะ Log การปรับยศ**", view=LogToggleView())
+
+
+ANGPAO_RECEIVER_PHONE = "0822294767"
+
+ANGPAO_ERROR_MESSAGES = {
+    "VOUCHER_EXPIRED": "ลิงก์ซองของขวัญหมดอายุแล้ว",
+    "VOUCHER_ALREADY_USED": "ลิงก์ซองของขวัญถูกใช้งานไปแล้ว",
+    "SELF_CLAIM_NOT_ALLOWED": "ไม่สามารถใช้อั่งเปาของตัวเองได้",
+    "INVALID_PHONE_OR_USED": "เบอร์รับเงินไม่ถูกต้อง หรือรับเงินไปแล้ว",
+    "INVALID_PHONE": "เบอร์รับเงินไม่ถูกต้อง (ต้อง 10 หลัก ขึ้นต้นด้วย 0)",
+    "INVALID_VOUCHER": "กรุณาระบุลิงก์ซองของขวัญให้ถูกต้อง",
+    "MISSING_PARAMETER": "ข้อมูลไม่ครบถ้วน กรุณาลองใหม่",
+    "INVALID_PATH": "รูปแบบคำขอไม่ถูกต้อง",
+    "INVALID_JSON": "รูปแบบคำขอไม่ถูกต้อง",
+    "VOUCHER_NOT_FOUND": "ไม่พบลิงก์ซองของขวัญนี้ กรุณาตรวจสอบลิงก์อีกครั้ง",
+    "RATE_LIMITED": "ระบบถูกเรียกใช้งานถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+    "EXTERNAL_SERVER_ERROR": "เซิร์ฟเวอร์ TrueMoney ขัดข้อง กรุณาลองใหม่ภายหลัง",
+    "EXTERNAL_INVALID_RESPONSE": "เซิร์ฟเวอร์ TrueMoney ตอบกลับไม่ถูกต้อง กรุณาลองใหม่",
+    "INTERNAL_SERVER_ERROR": "เซิร์ฟเวอร์ซองขัดข้อง กรุณาลองใหม่ภายหลัง",
+}
+
+
+def extract_angpao_voucher_id(link: str):
+    try:
+        parsed = urllib.parse.urlparse(link.strip())
+        query = urllib.parse.parse_qs(parsed.query)
+        if query.get("v"):
+            return query["v"][0]
+        last_segment = parsed.path.rstrip("/").split("/")[-1]
+        return last_segment or None
+    except Exception:
+        return None
+
+
+async def _try_parse_json(resp):
+    try:
+        return await resp.json(), None
+    except Exception:
+        text = await resp.text()
+        return None, text
+
+
+def _extract_amount(data: dict):
+    amount_raw = (
+        data.get("amount")
+        or (data.get("data") or {}).get("amount")
+        or "0"
+    )
+    try:
+        return int(float(str(amount_raw).strip()))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def check_angpao(link: str):
+    voucher_id = extract_angpao_voucher_id(link)
+    if not voucher_id:
+        return 0, "ลิงก์ซองไม่ถูกต้อง"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            payload = {"phone": ANGPAO_RECEIVER_PHONE, "voucher_id": voucher_id}
+            async with session.post(
+                "https://tmn-angpao.pages.dev/api",
+                json=payload,
+                headers={"Content-Type": "application/json", "Accept": "application/json"}
+            ) as resp:
+                data, raw = await _try_parse_json(resp)
+
+                if data and isinstance(data, dict):
+                    if data.get("success") or data.get("status") == "success":
+                        amount = _extract_amount(data)
+                        return amount, None
+                    else:
+                        code = data.get("code")
+                        msg = ANGPAO_ERROR_MESSAGES.get(code, data.get("message") or str(data))
+                        return 0, msg
+                else:
+                    return 0, "เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง กรุณาลองใหม่"
+    except Exception as e:
+        print(f"[check_angpao] Error: {e}")
+        return 0, "เกิดข้อผิดพลาดในการเชื่อมต่อ"
+
+
+async def log_topup(interaction, amount, roblox_name):
+    log_channel = bot.get_channel(LOG_CHANNEL_ID)
+    if log_channel:
+        time = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        log_embed = discord.Embed(
+            title="📌 บันทึกการเติมเงิน",
+            description=f"**ผู้ใช้:** {interaction.user.mention}\n**บัญชี Roblox:** {roblox_name}\n**ยอด:** {amount} บาท\n**เวลา:** {time}",
+            color=discord.Color.green()
+        )
+        await log_channel.send(embed=log_embed)
+
+
+class MainView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="ยืนยันข้อมูล", style=discord.ButtonStyle.primary, emoji="<a:1236208029246947339:1521848797326479462>", custom_id="verify_btn", row=0)
+    async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        member = interaction.guild.get_member(interaction.user.id)
+        nickname = member.nick if member.nick else interaction.user.name
+        roblox_name = nickname.split("|")[-1].strip() if "|" in nickname else nickname.strip()
+
+        if roblox_name in verified_users and verified_users[roblox_name] != interaction.user.id:
+            await interaction.followup.send("<a:1512789817811927070:1521852613690261737> ชื่อ Roblox นี้ถูกยืนยันโดยผู้ใช้อื่นแล้ว", ephemeral=True)
+            return
+
+        rank, success = await get_roblox_rank(roblox_name)
+        if success:
+            verified_users[roblox_name] = interaction.user.id
+            user_data[interaction.user.id] = roblox_name
+            save_data()
+
+            embed = discord.Embed(
+                title="ระบบได้ทำการตรวจสอบข้อมูลแล้ว <a:1236208029246947339:1521848797326479462>",
+                description=f"> [ 𝙐𝙨𝙚𝙧𝙣𝙖𝙢𝙚 𝙍𝙤𝙗𝙡𝙤𝙭 | **{roblox_name}** ]",
+                color=discord.Color.gold()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.followup.send("<a:1512789817811927070:1521852613690261737> ไม่พบผู้ใช้บน Roblox", ephemeral=True)
+
+    @discord.ui.button(label="โดเนท | ยศ", style=discord.ButtonStyle.primary, emoji="<:1389806861816959096:1521878501073096906>", custom_id="buyrank_btn", row=0)
+    async def buy_rank(self, interaction: discord.Interaction, button: discord.ui.Button):
+        username = user_data.get(interaction.user.id)
+        if not username:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณายืนยันข้อมูลก่อน", ephemeral=True)
+            return
+
+        current_rank, _ = await get_roblox_rank(username)
+        roles = await get_group_roles()
+
+        if not roles:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> ไม่สามารถโหลดข้อมูลยศจากกลุ่มได้ในขณะนี้", ephemeral=True)
+            return
+
+        view = RankSelectView(username, roles, current_rank)
+        if not view.has_options:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> ไม่พบยศที่สามารถซื้อได้", ephemeral=True)
+            return
+
+        await interaction.response.send_message(f"# เลือกยศที่ต้องการซื้อ\n> ยศปัจจุบัน: **{current_rank}**", view=view, ephemeral=True)
+
+    @discord.ui.button(label="เช็คข้อมูล", style=discord.ButtonStyle.gray, emoji="<a:1519586474910027786:1521849086519676950>", custom_id="check_btn", row=1)
+    async def check(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = interaction.user.id
+        username = user_data.get(user_id)
+        if not username:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณายืนยันข้อมูลก่อน", ephemeral=True)
+            return
+
+        rank, _ = await get_roblox_rank(username)
+        balance = user_balance.get(username, 0)
+
+        embed = discord.Embed(
+            title="ข้อมูลของคุณ <a:1449745750325203135:1520307935744360578>",
+            description="**กรุณาตรวจสอบว่าข้อมูลด้านล่างคือบัญชีของคุณ ก่อนเลือกซื้อยศ**",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="", value=f"`Roblox : {username}`", inline=False)
+        embed.add_field(name="", value=f"`ยศปัจจุบัน : {rank}`", inline=False)
+        embed.add_field(name="", value=f"`ยอดคงเหลือ : {balance} ฿`", inline=False)
+        embed.set_footer(text='ข้อมูลจากกลุ่ม("[ RLA ] Royal Lego Army")')
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="เติมเงินซองอั่งเปา", style=discord.ButtonStyle.success, emoji="<a:1518553850330611763:1520307963330560101>", custom_id="topup_btn", row=1)
+    async def topup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        username = user_data.get(interaction.user.id)
+        if not username:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณายืนยันข้อมูลก่อน", ephemeral=True)
+            return
+
+        if interaction.user.guild_permissions.administrator:
+            class AdminTopupChoiceView(discord.ui.View):
+                def __init__(self, roblox_name: str):
+                    super().__init__(timeout=60)
+                    self.roblox_name = roblox_name
+
+                @discord.ui.button(label="กรอกจำนวนเงิน", style=discord.ButtonStyle.primary)
+                async def manual(self, inter: discord.Interaction, btn: discord.ui.Button):
+                    await inter.response.send_modal(AdminTopupModal(self.roblox_name))
+
+                @discord.ui.button(label="ใช้ซองอั่งเปา", style=discord.ButtonStyle.success)
+                async def angpao(self, inter: discord.Interaction, btn: discord.ui.Button):
+                    await inter.response.send_modal(AdminAngpaoTopupModal(self.roblox_name))
+
+            await interaction.response.send_message("**เลือกวิธีเติมเงิน (ผู้ดูแล)**", view=AdminTopupChoiceView(username), ephemeral=True)
+        else:
+            modal = TopupModal(username)
+            await interaction.response.send_modal(modal)
+
+
+class TopupModal(discord.ui.Modal, title="เติมเงินด้วยซองอั่งเปา"):
+    link = discord.ui.TextInput(label="ลิงก์ซองอั่งเปา", placeholder="https://gift.truemoney.com/...", required=True)
+
+    def __init__(self, roblox_name: str):
+        super().__init__()
+        self.roblox_name = roblox_name
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        amount, error = await check_angpao(self.link.value)
+
+        if amount > 0:
+            user_balance[self.roblox_name] = user_balance.get(self.roblox_name, 0) + amount
+            save_data()
+            await log_topup(interaction, amount, self.roblox_name)
+            await interaction.followup.send(f"<a:1236208029246947339:1521848797326479462> เติมเงินสำเร็จ +{amount} บาท (บัญชี Roblox: {self.roblox_name})", ephemeral=True)
+        else:
+            await interaction.followup.send(f"<a:1512789817811927070:1521852613690261737> {error or 'ไม่สามารถรับเงินจากซองนี้ได้'}", ephemeral=True)
+
+
+class AdminTopupModal(discord.ui.Modal, title="เติมเงิน (ผู้ดูแล)"):
+    amount = discord.ui.TextInput(label="จำนวนเงิน (บาท)", placeholder="100", required=True)
+
+    def __init__(self, roblox_name: str):
+        super().__init__()
+        self.roblox_name = roblox_name
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            amount = int(self.amount.value)
+            if amount <= 0:
+                await interaction.followup.send("<a:1512789817811927070:1521852613690261737> กรุณากรอกจำนวนเงินมากกว่า 0", ephemeral=True)
+                return
+        except ValueError:
+            await interaction.followup.send("<a:1512789817811927070:1521852613690261737> กรุณากรอกตัวเลข", ephemeral=True)
+            return
+        user_balance[self.roblox_name] = user_balance.get(self.roblox_name, 0) + amount
+        save_data()
+        await log_topup(interaction, amount, self.roblox_name)
+        await interaction.followup.send(f"<a:1236208029246947339:1521848797326479462> เติมเงินสำเร็จ +{amount} บาท (ผู้ดูแล) (บัญชี Roblox: {self.roblox_name})", ephemeral=True)
+
+
+class AdminAngpaoTopupModal(discord.ui.Modal, title="เติมเงินด้วยซองอั่งเปา (ผู้ดูแล)"):
+    link = discord.ui.TextInput(label="ลิงก์ซองอั่งเปา", placeholder="https://gift.truemoney.com/...", required=True)
+
+    def __init__(self, roblox_name: str):
+        super().__init__()
+        self.roblox_name = roblox_name
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        amount, error = await check_angpao(self.link.value)
+        if amount > 0 and error is None:
+            user_balance[self.roblox_name] = user_balance.get(self.roblox_name, 0) + amount
+            save_data()
+            await log_topup(interaction, amount, self.roblox_name)
+            await interaction.followup.send(f"<a:1236208029246947339:1521848797326479462> เติมเงินด้วยซองสำเร็จ +{amount} บาท (ผู้ดูแล) (บัญชี Roblox: {self.roblox_name})", ephemeral=True)
+        else:
+            await interaction.followup.send(f"<a:1512789817811927070:1521852613690261737> {error or 'ไม่สามารถรับเงินจากซองนี้ได้'}", ephemeral=True)
+
+
+class RankSelectView(discord.ui.View):
+    def __init__(self, roblox_name: str, roles: dict, current_rank: str):
+        super().__init__(timeout=300)
+        self.roblox_name = roblox_name
+        self.roles = roles
+
+        options = []
+        for role_id, info in roles.items():
+            rank = info["rank"]
+            name = info["name"]
+            if rank in RANK_PRICES:
+                base_price = RANK_PRICES[rank]
+                price = apply_promo(base_price)
+                if promo_state.get("active") and promo_state.get("percent", 0) > 0:
+                    desc = f"ราคา {price} บาท (ลด {promo_state['percent']}% จาก {base_price} บาท) · rank {rank}"
+                else:
+                    desc = f"ราคา {price} บาท · rank {rank}"
+                options.append(discord.SelectOption(label=name, description=desc, value=str(role_id)))
+
+        self.has_options = bool(options)
+        if self.has_options:
+            self.select = discord.ui.Select(placeholder="เลือกยศที่ต้องการ", options=options, custom_id="rank_select_menu")
+            self.select.callback = self.select_callback
+            self.add_item(self.select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        role_id = int(self.select.values[0])
+        role_info = self.roles.get(role_id, {"name": "Unknown", "rank": 0})
+        rank_name = role_info["name"]
+
+        base_price = RANK_PRICES.get(role_info["rank"], 0)
+        price = apply_promo(base_price)
+
+        current_balance = user_balance.get(self.roblox_name, 0)
+        if current_balance < price:
+            embed = discord.Embed(title="<a:1512789817811927070:1521852613690261737> ยอดเงินไม่พอ",
+                                  description=f"**ยศ {rank_name} ราคา {price} ฿**\n**คุณมี {current_balance} ฿ · ขาดอีก {price - current_balance} ฿**",
+                                  color=discord.Color.red())
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        success = await change_roblox_rank(self.roblox_name, role_id)
+        if success:
+            user_balance[self.roblox_name] = current_balance - price
+            save_data()
+            embed = discord.Embed(title="<a:1236208029246947339:1521848797326479462> ซื้อยศเสร็จสิ้น", description="**เปลี่ยนยศ Roblox แล้ว**", color=discord.Color.green())
+            embed.add_field(name="", value=f"```lua\nชื่อผู้ใช้ Roblox : {self.roblox_name}\nยศโดเนทที่ได้รับ : {rank_name}\nเงินที่เสียไป : -{price} ฿\nเงินคงเหลือ : {user_balance[self.roblox_name]} ฿```", inline=False)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.followup.send("<a:1512789817811927070:1521852613690261737> ไม่สามารถเปลี่ยนยศได้", ephemeral=True)
+
+
+# ==================== คำสั่งเก่าที่นำกลับมา ====================
+
+@bot.tree.command(name="วางโดเนทออโต้", description="วางระบบปรับยศโดเนทอัตโนมัติ (เฉพาะแอดมิน)")
+@app_commands.default_permissions(administrator=True)
+async def slash_setup_donate(interaction: discord.Interaction, channel: discord.TextChannel, banner: str, ข้อความ: str = None):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> คำสั่งนี้ใช้ได้เฉพาะแอดมินเท่านั้น", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title="<a:1519680484790112416:1520308598490665071> โดเนท",
+        description=ข้อความ or "-# กดปุ่มเพื่อทำการโดเนทยศอัตโนมัติ",
+        color=discord.Color.gold()
+    )
+    embed.set_image(url=banner)
+
+    await channel.send(embed=embed, view=MainView())
+    await interaction.response.send_message(f"<a:1236208029246947339:1521848797326479462> วางแผงโดเนทอัตโนมัติที่ {channel.mention} แล้ว", ephemeral=True)
+
+
+@bot.tree.command(name="เติมเงิน", description="เติมเงินให้ผู้ใช้ (เฉพาะแอดมิน)")
+@app_commands.default_permissions(administrator=True)
+async def slash_give_money(interaction: discord.Interaction, user: discord.Member, amount: int):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> คำสั่งนี้ใช้ได้เฉพาะแอดมินเท่านั้น", ephemeral=True)
+        return
+
+    if amount <= 0:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณาระบุจำนวนเงินมากกว่า 0", ephemeral=True)
+        return
+
+    roblox_name = user_data.get(user.id)
+    if not roblox_name:
+        await interaction.response.send_message(f"<a:1512789817811927070:1521852613690261737> {user.mention} ยังไม่ได้กดยืนยันข้อมูล Roblox", ephemeral=True)
+        return
+
+    user_balance[roblox_name] = user_balance.get(roblox_name, 0) + amount
+    save_data()
+    await log_topup(interaction, amount, roblox_name)
+
+    embed = discord.Embed(
+        title="<a:1236208029246947339:1521848797326479462> เติมเงินสำเร็จ (แอดมิน)",
+        description=f"**ผู้ใช้ Discord:** {user.mention}\n**บัญชี Roblox:** {roblox_name}\n**จำนวนที่เติม:** +{amount} ฿\n**ยอดคงเหลือ:** {user_balance[roblox_name]} ฿",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="เติมเงินทั้งหมด", description="เติมเงินให้ผู้ใช้ที่ยืนยันข้อมูลแล้วทุกคน (เฉพาะแอดมิน)")
+@app_commands.default_permissions(administrator=True)
+async def slash_give_money_all(interaction: discord.Interaction, amount: int):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> คำสั่งนี้ใช้ได้เฉพาะแอดมินเท่านั้น", ephemeral=True)
+        return
+
+    if amount <= 0:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณาระบุจำนวนเงินมากกว่า 0", ephemeral=True)
+        return
+
+    recipient_count = len(verified_users)
+    if recipient_count == 0:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> ยังไม่มีผู้ใช้ที่ยืนยันข้อมูล Roblox", ephemeral=True)
+        return
+
+    confirm_embed = discord.Embed(
+        title="⚠️ ยืนยันการเติมเงินให้ทุกคน",
+        description=f"กำลังจะเติมเงิน **+{amount} ฿** ให้กับผู้ใช้ที่ยืนยันข้อมูลแล้วทั้งหมด **{recipient_count} บัญชี**\nรวมเป็นเงินทั้งหมด **{amount * recipient_count} ฿**",
+        color=discord.Color.orange()
+    )
+    # ใส่ ConfirmGiveAllView ด้านล่าง (ถ้าต้องการใช้เต็มรูปแบบ)
+
+
+class ConfirmGiveAllView(discord.ui.View):
+    def __init__(self, amount: int, admin_id: int):
+        super().__init__(timeout=60)
+        self.amount = amount
+        self.admin_id = admin_id
+        self.done = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.admin_id:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> เฉพาะแอดมินที่สั่งคำสั่งนี้", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="ยืนยัน เติมเงินให้ทุกคน", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.done = True
+        for child in self.children:
+            child.disabled = True
+
+        for roblox_name in list(verified_users.keys()):
+            user_balance[roblox_name] = user_balance.get(roblox_name, 0) + self.amount
+        save_data()
+
+        result_embed = discord.Embed(
+            title="<a:1236208029246947339:1521848797326479462> เติมเงินให้ทุกคนสำเร็จ",
+            description=f"**จำนวนต่อคน:** +{self.amount} ฿\n**จำนวนผู้ได้รับ:** {len(verified_users)} บัญชี",
+            color=discord.Color.green()
+        )
+        await interaction.response.edit_message(embed=result_embed, view=self)
+
+    @discord.ui.button(label="ยกเลิก", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.done = True
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(content="ยกเลิกการเติมเงินให้ทุกคน", view=self)
+
+
+# ระบบพิมพ์ (นำกลับมา)
+def parse_hex_color(value: str):
+    if not value:
+        return None
+    v = value.strip().lstrip("#")
+    if len(v) != 6:
+        return None
+    try:
+        return discord.Color(int(v, 16))
+    except ValueError:
+        return None
+
+
+class SayMessageModal(discord.ui.Modal, title="พิมพ์ข้อความ"):
+    message = discord.ui.TextInput(label="ข้อความ", style=discord.TextStyle.paragraph, required=True, max_length=4000)
+    title_input = discord.ui.TextInput(label="หัวข้อ (Embed)", required=False, max_length=256)
+    footer_input = discord.ui.TextInput(label="ข้อความท้าย (Embed)", required=False, max_length=2048)
+
+    def __init__(self, channel, send_method, color, upload_file):
+        super().__init__()
+        self.channel = channel
+        self.send_method = send_method
+        self.color = color
+        self.upload_file = upload_file
+
+    async def on_submit(self, interaction: discord.Interaction):
+        message = self.message.value
+        if self.send_method == "plain":
+            if self.upload_file:
+                await self.channel.send(content=message, file=self.upload_file)
+            else:
+                await self.channel.send(message)
+        else:
+            embed_color = discord.Color.blurple()
+            if self.color:
+                parsed = parse_hex_color(self.color)
+                if parsed:
+                    embed_color = parsed
+
+            embed = discord.Embed(description=message, color=embed_color)
+            if self.title_input.value:
+                embed.title = self.title_input.value
+            if self.footer_input.value:
+                embed.set_footer(text=self.footer_input.value)
+
+            if self.upload_file:
+                embed.set_image(url=f"attachment://{self.upload_file.filename}")
+                await self.channel.send(embed=embed, file=self.upload_file)
+            else:
+                await self.channel.send(embed=embed)
+
+        await interaction.response.send_message(f"<a:1236208029246947339:1521848797326479462> ส่งข้อความไปที่ {self.channel.mention} แล้ว", ephemeral=True)
+
+
+@bot.tree.command(name="พิมพ์", description="ให้บอทส่งข้อความ/Embed ไปยังช่องที่กำหนด (เฉพาะแอดมิน)")
+@app_commands.default_permissions(administrator=True)
+async def slash_say(interaction: discord.Interaction, channel: typing.Union[discord.TextChannel, discord.VoiceChannel], method: app_commands.Choice[str] = None, color: str = None, image: discord.Attachment = None):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> คำสั่งนี้ใช้ได้เฉพาะแอดมินเท่านั้น", ephemeral=True)
+        return
+
+    send_method = method.value if method else "embed"
+    upload_file = None
+    if image:
+        file_bytes = await image.read()
+        upload_file = discord.File(io.BytesIO(file_bytes), filename=image.filename)
+
+    await interaction.response.send_modal(SayMessageModal(channel, send_method, color, upload_file))
+
+
+# ==================== Bot Settings ====================
+class PromoPercentModal(discord.ui.Modal, title="ตั้งค่าโปรโมชั่นยศ"):
+    percent = discord.ui.TextInput(label="ลดกี่เปอร์เซ็นต์", placeholder="เช่น 15", required=True, max_length=3)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            value = int(self.percent.value)
+        except ValueError:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณากรอกตัวเลขเท่านั้น", ephemeral=True)
+            return
+        if not (1 <= value <= 100):
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณากรอกเปอร์เซ็นต์ระหว่าง 1-100", ephemeral=True)
+            return
+
+        promo_state["active"] = True
+        promo_state["percent"] = value
+        save_data()
+        await refresh_rank_list_message()
+        await interaction.response.edit_message(embed=build_bot_settings_embed(), view=BotSettingsView())
+
+
+class AddRankModal(discord.ui.Modal, title="เพิ่มยศใหม่"):
+    rank_input = discord.ui.TextInput(label="Rank (1-255)", placeholder="ตัวอย่าง: 15", required=True, max_length=3)
+    price_input = discord.ui.TextInput(label="ราคา (บาท)", placeholder="ตัวอย่าง: 150", required=True, max_length=6)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            rank = int(self.rank_input.value)
+            price = int(self.price_input.value)
+            if not (1 <= rank <= 255) or price <= 0:
+                await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> Rank ต้องอยู่ระหว่าง 1-255 และราคาต้องมากกว่า 0", ephemeral=True)
+                return
+        except ValueError:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณากรอกตัวเลขเท่านั้น", ephemeral=True)
+            return
+
+        RANK_PRICES[rank] = price
+        save_data()
+        await refresh_rank_list_message()
+        await interaction.response.edit_message(embed=build_bot_settings_embed(), view=BotSettingsView())
+        await interaction.followup.send(f"<a:1236208029246947339:1521848797326479462> เพิ่มยศ rank **{rank}** ราคา **{price} บาท** เรียบร้อยแล้ว", ephemeral=True)
+
+
+class RemoveRankModal(discord.ui.Modal, title="ลบยศ"):
+    rank_input = discord.ui.TextInput(label="Rank ที่ต้องการลบ", placeholder="ตัวอย่าง: 15", required=True, max_length=3)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            rank = int(self.rank_input.value)
+        except ValueError:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> กรุณากรอกตัวเลข", ephemeral=True)
+            return
+
+        if rank not in RANK_PRICES:
+            await interaction.response.send_message(f"<a:1512789817811927070:1521852613690261737> ไม่พบยศ rank **{rank}** ในรายการ", ephemeral=True)
+            return
+
+        del RANK_PRICES[rank]
+        save_data()
+        await refresh_rank_list_message()
+        await interaction.response.edit_message(embed=build_bot_settings_embed(), view=BotSettingsView())
+        await interaction.followup.send(f"<a:1236208029246947339:1521848797326479462> ลบยศ rank **{rank}** เรียบร้อยแล้ว", ephemeral=True)
+
+
+class BotSettingsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.select(
+        placeholder="เลือกตัวเลือก",
+        custom_id="bot_settings_select",
+        options=[
+            discord.SelectOption(label="เปิดโปรโมชั่นยศ", description="เปิดใช้งานส่วนลดราคายศทั้งหมด", emoji="<a:1519680484790112416:1520308598490665071>", value="promo_on"),
+            discord.SelectOption(label="ปิดโปรโมชั่นยศ", description="ปิดการใช้งานส่วนลดราคายศ", emoji="<a:1519680543128551690:1521862768435920999>", value="promo_off"),
+            discord.SelectOption(label="เพิ่มยศ", description="เพิ่มยศเข้าไปในรายการขาย", emoji="<a:1519680484790112416:1520308598490665071>", value="add_rank"),
+            discord.SelectOption(label="ลบยศ", description="ลบยศออกจากรายการขาย", emoji="<a:1519680543128551690:1521862768435920999>", value="remove_rank")
+        ]
+    )
+    async def settings_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> เฉพาะแอดมินเท่านั้น", ephemeral=True)
+            return
+
+        choice = select.values[0]
+        if choice == "promo_on":
+            await interaction.response.send_modal(PromoPercentModal())
+        elif choice == "promo_off":
+            promo_state["active"] = False
+            save_data()
+            await refresh_rank_list_message()
+            await interaction.response.edit_message(embed=build_bot_settings_embed(), view=self)
+        elif choice == "add_rank":
+            await interaction.response.send_modal(AddRankModal())
+        elif choice == "remove_rank":
+            await interaction.response.send_modal(RemoveRankModal())
+
+    @discord.ui.button(label="แสดงรายการยศ", emoji="<:ddd:1520268725373108315>", style=discord.ButtonStyle.gray, custom_id="show_rank_list_btn", row=1)
+    async def show_rank_list(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = await build_rank_list_embed()
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="ตั้งค่าระบบโดเนท", description="ตั้งค่าระบบบอทโดเนท (เฉพาะแอดมิน)")
+@app_commands.default_permissions(administrator=True)
+async def slash_bot_settings(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("<a:1512789817811927070:1521852613690261737> คำสั่งนี้ใช้ได้เฉพาะแอดมินเท่านั้น", ephemeral=True)
+        return
+    await interaction.response.send_message(embed=build_bot_settings_embed(), view=BotSettingsView())
+
+
+async def build_rank_list_embed():
+    roles = await get_group_roles()
+    rank_to_name = {info["rank"]: info["name"] for info in roles.values()}
+
+    lines = ["# <a:1389806861816959096:1522125011039682692> รายการยศทั้งหมดในบอทขายยศ"]
+    if not RANK_PRICES:
+        lines.append("> ยังไม่มียศที่เปิดขายในตอนนี้")
+    else:
+        for rank in sorted(RANK_PRICES.keys()):
+            base_price = RANK_PRICES[rank]
+            price = apply_promo(base_price)
+            name = rank_to_name.get(rank, "(ไม่พบชื่อยศนี้ในกลุ่ม Roblox แล้ว)")
+            if promo_state.get("active") and promo_state.get("percent", 0) > 0:
+                lines.append(f"> **{name}** · rank {rank} — ~~{base_price}~~ **{price} บาท** (ลด {promo_state['percent']}%)")
+            else:
+                lines.append(f"> **{name}** · rank {rank} — **{price} บาท**")
+
+    return discord.Embed(description="\n".join(lines), color=discord.Color.gold())
+
+
+async def refresh_rank_list_message():
+    channel_id = RANK_LIST_MESSAGE.get("channel_id")
+    message_id = RANK_LIST_MESSAGE.get("message_id")
+    if not channel_id or not message_id:
+        return
+    channel = bot.get_channel(channel_id)
+    if not channel:
+        return
+    try:
+        embed = await build_rank_list_embed()
+        await channel.get_partial_message(message_id).edit(embed=embed)
+    except (discord.NotFound, discord.Forbidden):
+        RANK_LIST_MESSAGE["channel_id"] = None
+        RANK_LIST_MESSAGE["message_id"] = None
+        save_data()
+    except Exception as e:
+        print(f"[refresh_rank_list_message] Exception: {e}")
+
+
+@bot.event
+async def on_ready():
+    load_data()
+    bot.add_view(MainView())
+    bot.add_view(BotSettingsView())
+    try:
+        synced = await bot.tree.sync()
+        print(f"[on_ready] Synced {len(synced)} slash command(s)")
+    except Exception as e:
+        print(f"[on_ready] Slash command sync failed: {e}")
+    print(f"บอทออนไลน์: {bot.user}")
+
+
+bot.run(DISCORD_BOT_TOKEN)
